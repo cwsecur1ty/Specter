@@ -1,13 +1,27 @@
 import os
 import socket
+import ipaddress
 import requests
 from scapy.all import sr1, IP, ICMP
+from bs4 import BeautifulSoup
 from tabulate import tabulate
+from concurrent.futures import ThreadPoolExecutor
 
-from scapy.layers.inet import IP, ICMP
+# Validate IP Address
+def is_valid_ip(ip):
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
 
+# Ping Sweep
 def ping_sweep(target_ip):
     """Check if the target is alive using ICMP ping."""
+    if not is_valid_ip(target_ip):
+        print("[-] Invalid IP address. Please try again.")
+        return False
+
     print(f"Pinging {target_ip}...")
     try:
         icmp_request = sr1(IP(dst=target_ip)/ICMP(), timeout=2, verbose=0)
@@ -21,9 +35,13 @@ def ping_sweep(target_ip):
         print(f"[-] Error during ping sweep: {e}")
         return False
 
+# OS Detection
+def os_detection(target_ip):
+    """Detect the target OS using TTL analysis."""
+    if not is_valid_ip(target_ip):
+        print("[-] Invalid IP address. Please try again.")
+        return
 
-def os_detection(target_ip, open_ports=None):
-    """Detect the target OS using TTL analysis and service banners."""
     print("\nRunning OS detection...")
     ttl_guess = {
         range(60, 65): "Linux/Unix",
@@ -46,13 +64,13 @@ def os_detection(target_ip, open_ports=None):
     except Exception as e:
         print(f"[-] OS detection error: {e}")
 
+# Port Scan
+def port_scan(target_ip, start_port=1, end_port=1024, max_threads=100):
+    """Perform a thread-limited port scan with optional banner grabbing."""
+    if not is_valid_ip(target_ip):
+        print("[-] Invalid IP address. Please try again.")
+        return []
 
-
-import re
-import threading
-
-def port_scan(target_ip, start_port=1, end_port=1024):
-    """Perform a port scan with threading and optional banner grabbing."""
     print(f"\nScanning ports {start_port}-{end_port} on {target_ip}...")
     open_ports = []
 
@@ -65,45 +83,24 @@ def port_scan(target_ip, start_port=1, end_port=1024):
                     banner = "Unknown"
                     try:
                         sock.send(b"HEAD / HTTP/1.1\r\n\r\n")
-                        banner = sock.recv(1024).decode().strip()
+                        banner = sock.recv(1024).decode(errors="ignore").strip()
                     except Exception:
                         banner = "Open (no banner)"
-                    print(f"[+] Port {port}: {banner}")
-                    open_ports.append({"port": port, "banner": banner})
+                    open_ports.append({"Port": port, "Banner": banner})
         except Exception:
             pass
 
-    threads = []
-    for port in range(start_port, end_port + 1):
-        thread = threading.Thread(target=scan_port, args=(port,))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
+    with ThreadPoolExecutor(max_threads) as executor:
+        for port in range(start_port, end_port + 1):
+            executor.submit(scan_port, port)
 
     print("\n[+] Port Scan Results:")
-    for result in open_ports:
-        print(f"    Port {result['port']}: {result['banner']}")
+    print(tabulate(open_ports, headers="keys", tablefmt="grid"))
     return open_ports
 
-
-
-import requests
-from bs4 import BeautifulSoup
-
-import time
-
-import requests
-
-
-import requests
-from bs4 import BeautifulSoup
-
+# Exploit-DB Search
 def search_exploitdb(query, output_file="exploitdb_results.txt"):
-    """
-    Search for exploits on Exploit-DB for the given query.
-    """
+    """Search for exploits on Exploit-DB for the given query."""
     print(f"\nSearching Exploit-DB for '{query}'...")
     base_url = "https://www.exploit-db.com/search"
     headers = {
@@ -112,12 +109,10 @@ def search_exploitdb(query, output_file="exploitdb_results.txt"):
     params = {"q": query}
 
     try:
-        # Send the GET request
         response = requests.get(base_url, params=params, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Locate the exploits table
         exploits = []
         table = soup.find("table", {"id": "exploits-table"})
         if table:
@@ -129,31 +124,22 @@ def search_exploitdb(query, output_file="exploitdb_results.txt"):
                     title = columns[1].text.strip()
                     date = columns[2].text.strip()
                     print(f"[Exploit] {exploit_id}: {title} (Date: {date})")
-                    exploits.append({"id": exploit_id, "title": title, "date": date})
+                    exploits.append({"ID": exploit_id, "Title": title, "Date": date})
         else:
-            # If table is None, handle gracefully
             print("[-] No results found on Exploit-DB.")
-            print("Debug Info: Unable to locate the table with id='exploits-table'.")
-            print("Partial HTML response (debugging):")
-            print(response.text[:1000])  # Print first 1000 characters of HTML for debugging
 
-        # Save results to a file
         if exploits:
             with open(output_file, "w") as file:
                 for exploit in exploits:
-                    file.write(f"{exploit['id']}: {exploit['title']} (Date: {exploit['date']})\n")
+                    file.write(f"{exploit['ID']}: {exploit['Title']} (Date: {exploit['Date']})\n")
             print(f"[+] Results saved to {output_file}.")
-        else:
-            print("[+] No exploits found for the query.")
     except requests.exceptions.RequestException as e:
         print(f"[-] Error querying Exploit-DB: {e}")
     except Exception as e:
         print(f"[-] An unexpected error occurred: {e}")
 
-
-
+# Main Menu
 def menu():
-    # ASCII art
     art = R"""
  /$$$$$$$                                          /$$  /$$$$$$          
 | $$__  $$                                        |__/ /$$__  $$         
@@ -177,9 +163,9 @@ def menu():
         print("3. Port Scan")
         print("4. Search CVEs")
         print("5. Exit")
-        
+
         choice = input("Enter your choice: ").strip()
-        
+
         if choice == "1":
             target_ip = input("Enter the target IP address: ").strip()
             ping_sweep(target_ip)
@@ -192,15 +178,15 @@ def menu():
             end_port = int(input("Enter the ending port (default 1024): ") or 1024)
             port_scan(target_ip, start_port, end_port)
         elif choice == "4":
-          query = input("Enter your search term for Exploit-DB (e.g., 'Apache', 'OpenSSH'): ").strip()
-          search_exploitdb(query)
+            query = input("Enter your search term for Exploit-DB (e.g., 'Apache', 'OpenSSH'): ").strip()
+            search_exploitdb(query)
         elif choice == "5":
             print("Exiting the tool. Goodbye!")
             break
         else:
             print("Invalid choice. Please try again.")
 
-
+# Main Function
 def main():
     menu()
 
