@@ -103,8 +103,8 @@ import requests
 from bs4 import BeautifulSoup
 from tabulate import tabulate
 
-import requests
-from bs4 import BeautifulSoup
+
+import textwrap
 from tabulate import tabulate
 
 def search_cve_mitre(query, output_file="mitre_cve_results.txt"):
@@ -116,43 +116,61 @@ def search_cve_mitre(query, output_file="mitre_cve_results.txt"):
     params = {"keyword": query}
 
     try:
+        # Fetch the response
         response = requests.get(base_url, params=params, timeout=10)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(response.content, "html.parser")
 
-        # Locate the table containing CVE results
-        table = soup.find("table", {"id": "TableWithRules"})
-        if not table:
-            print("[-] No results found on MITRE CVE database.")
+        # Locate the table explicitly
+        div_table = soup.find("div", {"id": "TableWithRules"})
+        if not div_table:
+            print("[DEBUG] Div with ID 'TableWithRules' not found.")
             return
 
-        rows = table.find_all("tr")[1:]  # Skip the header row
+        table = div_table.find("table")
+        if not table:
+            print("[DEBUG] Table inside 'TableWithRules' not found.")
+            return
+
+        # Locate rows in the table
+        rows = table.find_all("tr")[1:]  # Skip header row
+        if not rows:
+            print("[-] No data rows found in the table.")
+            return
+
+        # Parse each row and collect results
         results = []
         for row in rows:
             columns = row.find_all("td")
             if len(columns) >= 2:
                 cve_id = columns[0].text.strip()
-                cve_link = columns[0].find("a")["href"]
+                cve_link = f"https://cve.mitre.org{columns[0].find('a')['href']}"
                 description = columns[1].text.strip()
-                print(f"[CVE] {cve_id}: {description}")
-                results.append({
-                    "CVE": cve_id,
-                    "Description": description,
-                    "Link": f"https://cve.mitre.org{cve_link}"
-                })
 
-        # Save results to a file
-        if results:
-            with open(output_file, "w", encoding="utf-8") as file:
-                for result in results:
-                    file.write(f"{result['CVE']}: {result['Description']} ({result['Link']})\n")
-            print(f"[+] Results saved to {output_file}.")
-        else:
-            print("[-] No CVEs matched the query.")
+                # Fix long descriptions with wrapping
+                wrapped_description = "\n".join(textwrap.wrap(description, width=80))
+
+                # Fix URLs to avoid duplicates
+                if cve_link.startswith("https://cve.mitre.orghttps://"):
+                    cve_link = cve_link.replace("https://cve.mitre.org", "")
+
+                results.append([cve_id, wrapped_description, cve_link])
+
+        # Print results in a tabulated format
+        headers = ["CVE ID", "Description", "Link"]
+        print("\n" + tabulate(results, headers=headers, tablefmt="fancy_grid"))
+
+        # Save full results to a file
+        with open(output_file, "w", encoding="utf-8") as file:
+            for row in results:
+                file.write(f"{row[0]}: {row[1]} ({row[2]})\n")
+        print(f"\n[+] Results saved to {output_file}.")
+
     except requests.exceptions.RequestException as e:
         print(f"[-] Error querying MITRE CVE database: {e}")
     except Exception as e:
         print(f"[-] An unexpected error occurred: {e}")
+
 
 
 
