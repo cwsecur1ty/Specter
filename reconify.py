@@ -21,47 +21,31 @@ def ping_sweep(target_ip):
         print(f"[-] Error during ping sweep: {e}")
         return False
 
-from scapy.layers.inet import IP
 
 def os_detection(target_ip, open_ports=None):
     """Detect the target OS using TTL analysis and service banners."""
     print("\nRunning OS detection...")
-    ttl_guess = {64: "Linux/Unix", 128: "Windows", 255: "Cisco/Networking Device"}
+    ttl_guess = {
+        range(60, 65): "Linux/Unix",
+        range(120, 130): "Windows",
+        range(250, 256): "Cisco/Networking Device"
+    }
 
-    # Detect TTL and determine OS
     try:
         icmp_request = sr1(IP(dst=target_ip)/ICMP(), timeout=2, verbose=0)
         if icmp_request:
             ttl = icmp_request.ttl
-            os_type = ttl_guess.get(ttl, "Unknown")
+            os_type = "Unknown"
+            for ttl_range, os_name in ttl_guess.items():
+                if ttl in ttl_range:
+                    os_type = os_name
+                    break
             print(f"[+] Detected OS from TTL: {os_type} (TTL={ttl})")
         else:
             print("[-] ICMP request failed; OS detection inconclusive.")
     except Exception as e:
         print(f"[-] OS detection error: {e}")
-        return "Unknown"
 
-    # Use open ports for banner detection if provided
-    if open_ports:
-        print("[+] Checking service banners for OS clues...")
-        for port in open_ports:
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.settimeout(1)
-                    sock.connect((target_ip, port))
-                    sock.send(b"HEAD / HTTP/1.1\r\n\r\n")
-                    banner = sock.recv(1024).decode().strip()
-                    print(f"[+] Detected banner on port {port}: {banner}")
-                    if "Ubuntu" in banner:
-                        os_type = "Linux/Ubuntu"
-                    elif "Windows" in banner or "Microsoft" in banner:
-                        os_type = "Windows"
-            except Exception as e:
-                print(f"[-] Failed to retrieve banner on port {port}: {e}")
-    else:
-        print("[-] No open ports to analyze banners.")
-
-    return os_type
 
 
 import re
@@ -82,20 +66,10 @@ def port_scan(target_ip, start_port=1, end_port=1024):
                     try:
                         sock.send(b"HEAD / HTTP/1.1\r\n\r\n")
                         banner = sock.recv(1024).decode().strip()
-                        if "Server" in banner or "SSH" in banner:
-                            match = re.search(r"Server: (.+)", banner)
-                            if match:
-                                service = match.group(1)
-                                print(f"[+] Port {port}: {service}")
-                                open_ports.append({"port": port, "service": service})
-                            else:
-                                print(f"[+] Port {port}: {banner}")
-                        else:
-                            print(f"[+] Port {port}: Open (no banner)")
-                            open_ports.append({"port": port, "service": "Unknown"})
                     except Exception:
-                        print(f"[+] Port {port}: Open (no banner)")
-                        open_ports.append({"port": port, "service": "Unknown"})
+                        banner = "Open (no banner)"
+                    print(f"[+] Port {port}: {banner}")
+                    open_ports.append({"port": port, "banner": banner})
         except Exception:
             pass
 
@@ -110,8 +84,9 @@ def port_scan(target_ip, start_port=1, end_port=1024):
 
     print("\n[+] Port Scan Results:")
     for result in open_ports:
-        print(f"    Port {result['port']}: {result['service']}")
+        print(f"    Port {result['port']}: {result['banner']}")
     return open_ports
+
 
 
 import requests
@@ -124,19 +99,18 @@ def search_cves(service_name, version, output_file="cve_results.txt"):
     """Search for CVEs using the CVE Details website."""
     print(f"\nSearching CVEs for {service_name} {version}...")
     base_url = "https://www.cvedetails.com/vulnerability-search.php"
-    params = {"q": f"{service_name} {version}"}
+    # Simplify the query to avoid overly specific searches
+    query = f"{service_name} {version.split('.')[0]}"  # Use major version only
+    params = {"q": query}
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 
     try:
         response = requests.get(base_url, params=params, headers=headers, timeout=10)
-        if response.status_code == 403:
-            print("[-] Request blocked by the CVE Details website. Please try again later.")
-            return
         response.raise_for_status()
-
         soup = BeautifulSoup(response.text, 'html.parser')
+
         cves = []
         table = soup.find("table", {"class": "searchresults"})
         if table:
@@ -159,6 +133,7 @@ def search_cves(service_name, version, output_file="cve_results.txt"):
             print("[+] No CVEs found.")
     except requests.exceptions.RequestException as e:
         print(f"[-] Error searching CVEs: {e}")
+
 
 
 def menu():
