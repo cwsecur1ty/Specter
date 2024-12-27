@@ -97,13 +97,15 @@ import time
 import requests
 
 
-def search_cves_mitre(service_name, output_file="mitre_cve_results.txt"):
+def search_cves_mitre(service_name, version=None, output_file="mitre_cve_results.txt"):
     """
     Search for CVEs using MITRE CVE (cve.org) with web scraping.
+    Supports searching with both service name and version.
     """
-    print(f"\nSearching CVEs for {service_name} using MITRE CVE...")
+    query = service_name if not version else f"{service_name} {version}"
+    print(f"\nSearching CVEs for {query} using MITRE CVE...")
     base_url = "https://www.cve.org/Search"
-    params = {"q": service_name}
+    params = {"q": query}
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
@@ -135,6 +137,7 @@ def search_cves_mitre(service_name, output_file="mitre_cve_results.txt"):
             print("[+] No CVEs found.")
     except requests.exceptions.RequestException as e:
         print(f"[-] Error querying MITRE CVE: {e}")
+
 
 
 
@@ -179,8 +182,8 @@ def menu():
             port_scan(target_ip, start_port, end_port)
         elif choice == "4":
             service_name = input("Enter the service name: ").strip()
-            version = input("Enter the service version: ").strip()
-            search_cves(service_name, version)
+            version = input("Enter the service version (leave blank if unknown): ").strip()
+            search_cves_mitre(service_name, version if version else None)
         elif choice == "5":
             print("Exiting the tool. Goodbye!")
             break
