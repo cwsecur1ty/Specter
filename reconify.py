@@ -15,26 +15,31 @@ def ping_sweep(target_ip):
         print(f"[-] {target_ip} is not reachable.")
         return False
 
+from scapy.layers.inet import IP
+
 def os_detection(target_ip, open_ports=None):
-    """Detect the target OS using TTL analysis, banners, and advanced queries."""
+    """Detect the target OS using TTL analysis and service banners."""
     print("\nRunning OS detection...")
-
-    # Step 1: TTL-based Detection (Basic)
     ttl_guess = {64: "Linux/Unix", 128: "Windows", 255: "Cisco/Networking Device"}
-    icmp_request = sr1(IP(dst=target_ip)/ICMP(), timeout=2, verbose=0)
-    os_type = "Unknown"
-    if icmp_request:
-        ttl = icmp_request.ttl
-        os_type = ttl_guess.get(ttl, "Unknown")
-        if os_type == "Unknown" and ttl in range(60, 65):
-            os_type = "Linux/Unix (TTL ~64)"
-        elif os_type == "Unknown" and ttl in range(120, 130):
-            os_type = "Windows (TTL ~128)"
-        print(f"[+] Detected OS from TTL: {os_type} (TTL={ttl})")
-    else:
-        print("[-] ICMP request failed; TTL detection inconclusive.")
+    
+    # Detect TTL and determine OS
+    try:
+        icmp_request = sr1(IP(dst=target_ip)/ICMP(), timeout=2, verbose=0)
+        os_type = "Unknown"
+        if icmp_request:
+            ttl = icmp_request.ttl
+            os_type = ttl_guess.get(ttl, "Unknown")
+            if os_type == "Unknown" and ttl in range(60, 65):
+                os_type = "Linux/Unix (TTL ~64)"
+            elif os_type == "Unknown" and ttl in range(120, 130):
+                os_type = "Windows (TTL ~128)"
+            print(f"[+] Detected OS from TTL: {os_type} (TTL={ttl})")
+        else:
+            print("[-] ICMP request failed; TTL detection inconclusive.")
+    except Exception as e:
+        print(f"[-] OS detection error: {e}")
 
-    # Step 2: Service Banner Analysis
+    # Use open ports for banner detection if provided
     if open_ports:
         print("[+] Checking service banners for OS clues...")
         for port in open_ports:
@@ -54,11 +59,8 @@ def os_detection(target_ip, open_ports=None):
     else:
         print("[-] No open ports to analyze banners.")
 
-    # Step 3: Suggest Probing with Advanced Tools
-    if os_type == "Unknown":
-        print("[!] Unable to determine OS. Consider using tools like nmap (`-O`) or p0f for more accurate results.")
-
     return os_type
+
 
 
 
@@ -78,20 +80,17 @@ def port_scan(target_ip, start_port=1, end_port=1024):
                     try:
                         sock.send(b"HEAD / HTTP/1.1\r\n\r\n")
                         banner = sock.recv(1024).decode().strip()
-                        service, version = "Unknown", "Unknown"
-                        if "Server:" in banner or "SSH" in banner:
-                            lines = banner.split("\n")
-                            for line in lines:
-                                if "Server:" in line or "SSH" in line:
-                                    service_version = line.strip().split(":")[1]
-                                    service, version = service_version.split("/")
-                                    break
-                        print(f"[+] Port {port} is open: {service} - {version}")
-                        open_ports.append({"port": port, "service": service, "version": version})
-                    except:
-                        print(f"[+] Port {port} is open (no banner).")
+                        if "Server" in banner or "SSH" in banner:
+                            service, version = banner.split(" ")[0], banner.split("/")[1]
+                            print(f"[+] Port {port}: {service} - {version}")
+                            open_ports.append({"port": port, "service": service, "version": version})
+                        else:
+                            print(f"[+] Port {port}: Unknown (no banner)")
+                            open_ports.append({"port": port, "service": "Unknown", "version": "Unknown"})
+                    except Exception:
+                        print(f"[+] Port {port}: Open (no banner)")
                         open_ports.append({"port": port, "service": "Unknown", "version": "Unknown"})
-        except Exception as e:
+        except Exception:
             pass
 
     threads = []
@@ -103,13 +102,17 @@ def port_scan(target_ip, start_port=1, end_port=1024):
     for thread in threads:
         thread.join()
 
+    # Summarized Results
+    print("\n[+] Port Scan Results:")
     for result in open_ports:
-        print(f"[+] Port {result['port']} - {result['service']}: {result['version']}")
+        print(f"    Port {result['port']}: {result['service']} - {result['version']}")
     return open_ports
 
 
-
 import requests
+from bs4 import BeautifulSoup
+
+import time
 from bs4 import BeautifulSoup
 
 def search_cves(service_name, version, output_file="cve_results.txt"):
@@ -117,13 +120,14 @@ def search_cves(service_name, version, output_file="cve_results.txt"):
     print(f"\nSearching CVEs for {service_name} {version}...")
     base_url = "https://www.cvedetails.com/vulnerability-search.php"
     params = {"q": f"{service_name} {version}"}
-    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+
     try:
         # Make a GET request to the CVE Details search page
-        response = requests.get(base_url, params=params, timeout=10)
+        response = requests.get(base_url, params=params, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        
+
         # Parse the CVE table
         cves = []
         table = soup.find("table", {"class": "searchresults"})
@@ -136,7 +140,8 @@ def search_cves(service_name, version, output_file="cve_results.txt"):
                     description = columns[1].text.strip()
                     print(f"[CVE] {cve_id}: {description}")
                     cves.append({"id": cve_id, "description": description})
-        
+            time.sleep(1)  # Delay between requests to avoid being blocked
+
         # Save results to a file
         if cves:
             with open(output_file, "w") as file:
@@ -145,8 +150,9 @@ def search_cves(service_name, version, output_file="cve_results.txt"):
             print(f"[+] Results saved to {output_file}.")
         else:
             print("[+] No CVEs found.")
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         print(f"[-] Error searching CVEs: {e}")
+
 
 
 
