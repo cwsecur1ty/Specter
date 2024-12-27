@@ -97,46 +97,54 @@ import time
 import requests
 
 
-def search_cves_mitre(service_name, version=None, output_file="mitre_cve_results.txt"):
+import requests
+from bs4 import BeautifulSoup
+
+def search_exploitdb(service_name, version=None, output_file="exploitdb_results.txt"):
     """
-    Search for CVEs using MITRE CVE (cve.org) with web scraping.
-    Supports searching with both service name and version.
+    Search for exploits on Exploit-DB for the given service and version.
     """
     query = service_name if not version else f"{service_name} {version}"
-    print(f"\nSearching CVEs for {query} using MITRE CVE...")
-    base_url = "https://www.cve.org/Search"
-    params = {"q": query}
+    print(f"\nSearching Exploit-DB for {query}...")
+    base_url = "https://www.exploit-db.com/search"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
+    params = {"q": query}
 
     try:
+        # Send the GET request
         response = requests.get(base_url, params=params, headers=headers, timeout=10)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        # Parse CVE results
-        cves = []
-        results = soup.find_all("div", class_="searchResultsContainer")
-        if results:
-            for result in results:
-                cve_id = result.find("a").text.strip()
-                description = result.find("p").text.strip()
-                print(f"[CVE] {cve_id}: {description}")
-                cves.append({"id": cve_id, "description": description})
+        # Parse the table of results
+        exploits = []
+        table = soup.find("table", {"id": "exploits-table"})
+        if table:
+            rows = table.find("tbody").find_all("tr")
+            for row in rows:
+                columns = row.find_all("td")
+                if len(columns) >= 3:
+                    exploit_id = columns[0].text.strip()
+                    title = columns[1].text.strip()
+                    date = columns[2].text.strip()
+                    print(f"[Exploit] {exploit_id}: {title} (Date: {date})")
+                    exploits.append({"id": exploit_id, "title": title, "date": date})
         else:
-            print("[-] No results found on MITRE CVE.")
+            print("[-] No results found on Exploit-DB.")
 
         # Save results to a file
-        if cves:
+        if exploits:
             with open(output_file, "w") as file:
-                for cve in cves:
-                    file.write(f"{cve['id']}: {cve['description']}\n")
+                for exploit in exploits:
+                    file.write(f"{exploit['id']}: {exploit['title']} (Date: {exploit['date']})\n")
             print(f"[+] Results saved to {output_file}.")
         else:
-            print("[+] No CVEs found.")
+            print("[+] No exploits found.")
     except requests.exceptions.RequestException as e:
-        print(f"[-] Error querying MITRE CVE: {e}")
+        print(f"[-] Error querying Exploit-DB: {e}")
+
 
 
 
@@ -183,7 +191,7 @@ def menu():
         elif choice == "4":
             service_name = input("Enter the service name: ").strip()
             version = input("Enter the service version (leave blank if unknown): ").strip()
-            search_cves_mitre(service_name, version if version else None)
+            search_exploitdb(service_name, version if version else None)
         elif choice == "5":
             print("Exiting the tool. Goodbye!")
             break
