@@ -99,44 +99,52 @@ def port_scan(target_ip, start_port=1, end_port=1024, max_threads=100):
     return open_ports
 
 # Exploit-DB Search
-def search_exploitdb(query, output_file="exploitdb_results.txt"):
-    """Search for exploits on Exploit-DB for the given query."""
-    print(f"\nSearching Exploit-DB for '{query}'...")
-    base_url = "https://www.exploit-db.com/search"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
+import requests
+from bs4 import BeautifulSoup
+from tabulate import tabulate
+
+def search_cve_details(query, output_file="cve_details_results.txt"):
+    """
+    Search for CVEs on CVE Details for the given query.
+    """
+    print(f"\nSearching CVE Details for '{query}'...")
+    base_url = "https://www.cvedetails.com/vulnerability-search.php"
     params = {"q": query}
 
     try:
-        response = requests.get(base_url, params=params, headers=headers, timeout=10)
+        response = requests.get(base_url, params=params, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
-        exploits = []
-        table = soup.find("table", {"id": "exploits-table"})
-        if table:
-            rows = table.find("tbody").find_all("tr")
-            for row in rows:
-                columns = row.find_all("td")
-                if len(columns) >= 3:
-                    exploit_id = columns[0].text.strip()
-                    title = columns[1].text.strip()
-                    date = columns[2].text.strip()
-                    print(f"[Exploit] {exploit_id}: {title} (Date: {date})")
-                    exploits.append({"ID": exploit_id, "Title": title, "Date": date})
-        else:
-            print("[-] No results found on Exploit-DB.")
+        # Locate results table in the HTML
+        table = soup.find("table", {"id": "vulnslisttable"})
+        if not table:
+            print("[-] No results found on CVE Details.")
+            return
 
-        if exploits:
-            with open(output_file, "w") as file:
-                for exploit in exploits:
-                    file.write(f"{exploit['ID']}: {exploit['Title']} (Date: {exploit['Date']})\n")
+        rows = table.find_all("tr")[1:]  # Skip the header row
+        results = []
+        for row in rows:
+            columns = row.find_all("td")
+            if len(columns) >= 2:
+                cve_id = columns[1].text.strip()
+                description = columns[2].text.strip()
+                print(f"[CVE] {cve_id}: {description}")
+                results.append({"CVE": cve_id, "Description": description})
+
+        # Save results to a file
+        if results:
+            with open(output_file, "w", encoding="utf-8") as file:
+                for result in results:
+                    file.write(f"{result['CVE']}: {result['Description']}\n")
             print(f"[+] Results saved to {output_file}.")
+        else:
+            print("[-] No CVEs matched the query.")
     except requests.exceptions.RequestException as e:
-        print(f"[-] Error querying Exploit-DB: {e}")
+        print(f"[-] Error querying CVE Details: {e}")
     except Exception as e:
         print(f"[-] An unexpected error occurred: {e}")
+
 
 # Main Menu
 def menu():
@@ -179,7 +187,7 @@ def menu():
             port_scan(target_ip, start_port, end_port)
         elif choice == "4":
             query = input("Enter your search term for Exploit-DB (e.g., 'Apache', 'OpenSSH'): ").strip()
-            search_exploitdb(query)
+            search_cve_details(query)
         elif choice == "5":
             print("Exiting the tool. Goodbye!")
             break
