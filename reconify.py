@@ -103,23 +103,27 @@ import requests
 from bs4 import BeautifulSoup
 from tabulate import tabulate
 
-def search_cve_details(query, output_file="cve_details_results.txt"):
+import requests
+from bs4 import BeautifulSoup
+from tabulate import tabulate
+
+def search_cve_mitre(query, output_file="mitre_cve_results.txt"):
     """
-    Search for CVEs on CVE Details for the given query.
+    Search for CVEs on MITRE CVE database for the given query.
     """
-    print(f"\nSearching CVE Details for '{query}'...")
-    base_url = "https://www.cvedetails.com/vulnerability-search.php"
-    params = {"q": query}
+    print(f"\nSearching MITRE CVE database for '{query}'...")
+    base_url = "https://cve.mitre.org/cgi-bin/cvekey.cgi"
+    params = {"keyword": query}
 
     try:
         response = requests.get(base_url, params=params, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Locate results table in the HTML
-        table = soup.find("table", {"id": "vulnslisttable"})
+        # Locate the table containing CVE results
+        table = soup.find("table", {"id": "TableWithRules"})
         if not table:
-            print("[-] No results found on CVE Details.")
+            print("[-] No results found on MITRE CVE database.")
             return
 
         rows = table.find_all("tr")[1:]  # Skip the header row
@@ -127,23 +131,29 @@ def search_cve_details(query, output_file="cve_details_results.txt"):
         for row in rows:
             columns = row.find_all("td")
             if len(columns) >= 2:
-                cve_id = columns[1].text.strip()
-                description = columns[2].text.strip()
+                cve_id = columns[0].text.strip()
+                cve_link = columns[0].find("a")["href"]
+                description = columns[1].text.strip()
                 print(f"[CVE] {cve_id}: {description}")
-                results.append({"CVE": cve_id, "Description": description})
+                results.append({
+                    "CVE": cve_id,
+                    "Description": description,
+                    "Link": f"https://cve.mitre.org{cve_link}"
+                })
 
         # Save results to a file
         if results:
             with open(output_file, "w", encoding="utf-8") as file:
                 for result in results:
-                    file.write(f"{result['CVE']}: {result['Description']}\n")
+                    file.write(f"{result['CVE']}: {result['Description']} ({result['Link']})\n")
             print(f"[+] Results saved to {output_file}.")
         else:
             print("[-] No CVEs matched the query.")
     except requests.exceptions.RequestException as e:
-        print(f"[-] Error querying CVE Details: {e}")
+        print(f"[-] Error querying MITRE CVE database: {e}")
     except Exception as e:
         print(f"[-] An unexpected error occurred: {e}")
+
 
 
 # Main Menu
@@ -186,8 +196,8 @@ def menu():
             end_port = int(input("Enter the ending port (default 1024): ") or 1024)
             port_scan(target_ip, start_port, end_port)
         elif choice == "4":
-            query = input("Enter your search term for Exploit-DB (e.g., 'Apache', 'OpenSSH'): ").strip()
-            search_cve_details(query)
+            query = input("Enter the CVE search term (e.g., 'Apache 2.4', 'OpenSSH'): ").strip()
+            search_cve_mitre(query)
         elif choice == "5":
             print("Exiting the tool. Goodbye!")
             break
