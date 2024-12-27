@@ -16,18 +16,27 @@ def ping_sweep(target_ip):
         return False
 
 def os_detection(target_ip, open_ports=None):
-    """Detect the target OS using TTL analysis and service banners."""
+    """Detect the target OS using TTL analysis, banners, and advanced queries."""
     print("\nRunning OS detection...")
+
+    # Step 1: TTL-based Detection (Basic)
     ttl_guess = {64: "Linux/Unix", 128: "Windows", 255: "Cisco/Networking Device"}
     icmp_request = sr1(IP(dst=target_ip)/ICMP(), timeout=2, verbose=0)
-
+    os_type = "Unknown"
     if icmp_request:
         ttl = icmp_request.ttl
         os_type = ttl_guess.get(ttl, "Unknown")
+        if os_type == "Unknown" and ttl in range(60, 65):
+            os_type = "Linux/Unix (TTL ~64)"
+        elif os_type == "Unknown" and ttl in range(120, 130):
+            os_type = "Windows (TTL ~128)"
         print(f"[+] Detected OS from TTL: {os_type} (TTL={ttl})")
+    else:
+        print("[-] ICMP request failed; TTL detection inconclusive.")
 
-    # Use open ports for banner detection if provided
+    # Step 2: Service Banner Analysis
     if open_ports:
+        print("[+] Checking service banners for OS clues...")
         for port in open_ports:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -36,12 +45,21 @@ def os_detection(target_ip, open_ports=None):
                     sock.send(b"HEAD / HTTP/1.1\r\n\r\n")
                     banner = sock.recv(1024).decode().strip()
                     print(f"[+] Detected banner on port {port}: {banner}")
-            except:
-                pass
+                    if "Ubuntu" in banner:
+                        os_type = "Linux/Ubuntu"
+                    elif "Windows" in banner or "Microsoft" in banner:
+                        os_type = "Windows"
+            except Exception as e:
+                print(f"[-] Failed to retrieve banner on port {port}: {e}")
     else:
-        print("[-] No open ports to check banners.")
+        print("[-] No open ports to analyze banners.")
+
+    # Step 3: Suggest Probing with Advanced Tools
+    if os_type == "Unknown":
+        print("[!] Unable to determine OS. Consider using tools like nmap (`-O`) or p0f for more accurate results.")
 
     return os_type
+
 
 
 import threading
@@ -60,11 +78,20 @@ def port_scan(target_ip, start_port=1, end_port=1024):
                     try:
                         sock.send(b"HEAD / HTTP/1.1\r\n\r\n")
                         banner = sock.recv(1024).decode().strip()
-                        print(f"[+] Port {port} is open: {banner}")
+                        service, version = "Unknown", "Unknown"
+                        if "Server:" in banner or "SSH" in banner:
+                            lines = banner.split("\n")
+                            for line in lines:
+                                if "Server:" in line or "SSH" in line:
+                                    service_version = line.strip().split(":")[1]
+                                    service, version = service_version.split("/")
+                                    break
+                        print(f"[+] Port {port} is open: {service} - {version}")
+                        open_ports.append({"port": port, "service": service, "version": version})
                     except:
                         print(f"[+] Port {port} is open (no banner).")
-                    open_ports.append(port)
-        except:
+                        open_ports.append({"port": port, "service": "Unknown", "version": "Unknown"})
+        except Exception as e:
             pass
 
     threads = []
@@ -76,35 +103,52 @@ def port_scan(target_ip, start_port=1, end_port=1024):
     for thread in threads:
         thread.join()
 
-    print(f"\n[+] Open ports on {target_ip}: {open_ports}")
+    for result in open_ports:
+        print(f"[+] Port {result['port']} - {result['service']}: {result['version']}")
     return open_ports
 
 
+
+import requests
+from bs4 import BeautifulSoup
+
 def search_cves(service_name, version, output_file="cve_results.txt"):
-    """Search for CVEs for a specific service and version using the NVD API."""
+    """Search for CVEs using the CVE Details website."""
     print(f"\nSearching CVEs for {service_name} {version}...")
-    api_url = "https://services.nvd.nist.gov/rest/json/cves/1.0"
-    params = {"keyword": f"{service_name} {version}", "resultsPerPage": 10}
-
+    base_url = "https://www.cvedetails.com/vulnerability-search.php"
+    params = {"q": f"{service_name} {version}"}
+    
     try:
-        response = requests.get(api_url, params=params, timeout=10)
+        # Make a GET request to the CVE Details search page
+        response = requests.get(base_url, params=params, timeout=10)
         response.raise_for_status()
-        cve_data = response.json()
-
-        with open(output_file, "w") as file:
-            if 'result' in cve_data and 'CVE_Items' in cve_data['result']:
-                for cve in cve_data['result']['CVE_Items']:
-                    cve_id = cve['cve']['CVE_data_meta']['ID']
-                    description = cve['cve']['description']['description_data'][0]['value']
-                    severity = cve.get('impact', {}).get('baseMetricV3', {}).get('cvssV3', {}).get('baseSeverity', 'Unknown')
-                    print(f"[CVE] {cve_id}: {description} (Severity: {severity})")
-                    file.write(f"{cve_id}: {description} (Severity: {severity})\n")
-            else:
-                print("[+] No CVEs found.")
-                file.write("No CVEs found.\n")
-        print(f"[+] Results saved to {output_file}.")
-    except requests.exceptions.RequestException as e:
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Parse the CVE table
+        cves = []
+        table = soup.find("table", {"class": "searchresults"})
+        if table:
+            rows = table.find_all("tr")[1:]  # Skip the header row
+            for row in rows:
+                columns = row.find_all("td")
+                if len(columns) >= 2:
+                    cve_id = columns[0].text.strip()
+                    description = columns[1].text.strip()
+                    print(f"[CVE] {cve_id}: {description}")
+                    cves.append({"id": cve_id, "description": description})
+        
+        # Save results to a file
+        if cves:
+            with open(output_file, "w") as file:
+                for cve in cves:
+                    file.write(f"{cve['id']}: {cve['description']}\n")
+            print(f"[+] Results saved to {output_file}.")
+        else:
+            print("[+] No CVEs found.")
+    except Exception as e:
         print(f"[-] Error searching CVEs: {e}")
+
+
 
 
 def menu():
@@ -125,7 +169,6 @@ def menu():
     print(art)
     print("The recon toolbox.")
 
-    """Interactive menu for the tool."""
     while True:
         print("\nRecon Tool Menu")
         print("1. Ping Sweep")
@@ -156,6 +199,7 @@ def menu():
             break
         else:
             print("Invalid choice. Please try again.")
+
 
 def main():
     menu()
