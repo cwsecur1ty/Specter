@@ -132,7 +132,8 @@ def search_exploitdb(service_name, version=None, output_file="exploitdb_results.
                     print(f"[Exploit] {exploit_id}: {title} (Date: {date})")
                     exploits.append({"id": exploit_id, "title": title, "date": date})
         else:
-            print("[-] No results found on Exploit-DB.")
+            # Inform the user if the table is missing
+            print("[-] No results found or unable to locate the exploits table.")
 
         # Save results to a file
         if exploits:
@@ -144,6 +145,9 @@ def search_exploitdb(service_name, version=None, output_file="exploitdb_results.
             print("[+] No exploits found.")
     except requests.exceptions.RequestException as e:
         print(f"[-] Error querying Exploit-DB: {e}")
+    except Exception as e:
+        print(f"[-] An unexpected error occurred: {e}")
+
 
 
 
