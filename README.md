@@ -76,6 +76,10 @@ Enter the service name: OpenSSH
 Enter the service version: 7.9
 [CVE] CVE-2018-15473: OpenSSH 7.9 - User Enumeration Vulnerability
 
+**For Example**:
+
+![image](https://github.com/user-attachments/assets/fbcbb955-4f8f-430d-9e5d-d0891aeb8ebd)
+
 ---
 
 ## Requirements
