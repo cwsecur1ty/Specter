@@ -117,7 +117,7 @@ def search_exploitdb(query, output_file="exploitdb_results.txt"):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Find the exploits table
+        # Locate the exploits table
         exploits = []
         table = soup.find("table", {"id": "exploits-table"})
         if table:
@@ -131,10 +131,11 @@ def search_exploitdb(query, output_file="exploitdb_results.txt"):
                     print(f"[Exploit] {exploit_id}: {title} (Date: {date})")
                     exploits.append({"id": exploit_id, "title": title, "date": date})
         else:
+            # If table is None, handle gracefully
             print("[-] No results found on Exploit-DB.")
-            # Print part of the HTML for debugging
-            print("Debug Info: The table with id='exploits-table' was not found.")
-            print(response.text[:1000])  # Print the first 1000 characters of the response
+            print("Debug Info: Unable to locate the table with id='exploits-table'.")
+            print("Partial HTML response (debugging):")
+            print(response.text[:1000])  # Print first 1000 characters of HTML for debugging
 
         # Save results to a file
         if exploits:
@@ -143,11 +144,13 @@ def search_exploitdb(query, output_file="exploitdb_results.txt"):
                     file.write(f"{exploit['id']}: {exploit['title']} (Date: {exploit['date']})\n")
             print(f"[+] Results saved to {output_file}.")
         else:
-            print("[+] No exploits found.")
+            print("[+] No exploits found for the query.")
     except requests.exceptions.RequestException as e:
         print(f"[-] Error querying Exploit-DB: {e}")
     except Exception as e:
         print(f"[-] An unexpected error occurred: {e}")
+
+
 
 def menu():
     # ASCII art
