@@ -100,12 +100,11 @@ import requests
 import requests
 from bs4 import BeautifulSoup
 
-def search_exploitdb(service_name, version=None, output_file="exploitdb_results.txt"):
+def search_exploitdb(query, output_file="exploitdb_results.txt"):
     """
-    Search for exploits on Exploit-DB for the given service and version.
+    Search for exploits on Exploit-DB for the given query.
     """
-    query = service_name if not version else f"{service_name} {version}"
-    print(f"\nSearching Exploit-DB for {query}...")
+    print(f"\nSearching Exploit-DB for '{query}'...")
     base_url = "https://www.exploit-db.com/search"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -118,7 +117,7 @@ def search_exploitdb(service_name, version=None, output_file="exploitdb_results.
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Parse the table of results
+        # Find the exploits table
         exploits = []
         table = soup.find("table", {"id": "exploits-table"})
         if table:
@@ -132,8 +131,10 @@ def search_exploitdb(service_name, version=None, output_file="exploitdb_results.
                     print(f"[Exploit] {exploit_id}: {title} (Date: {date})")
                     exploits.append({"id": exploit_id, "title": title, "date": date})
         else:
-            # Inform the user if the table is missing
-            print("[-] No results found or unable to locate the exploits table.")
+            print("[-] No results found on Exploit-DB.")
+            # Print part of the HTML for debugging
+            print("Debug Info: The table with id='exploits-table' was not found.")
+            print(response.text[:1000])  # Print the first 1000 characters of the response
 
         # Save results to a file
         if exploits:
@@ -147,11 +148,6 @@ def search_exploitdb(service_name, version=None, output_file="exploitdb_results.
         print(f"[-] Error querying Exploit-DB: {e}")
     except Exception as e:
         print(f"[-] An unexpected error occurred: {e}")
-
-
-
-
-
 
 def menu():
     # ASCII art
@@ -193,9 +189,8 @@ def menu():
             end_port = int(input("Enter the ending port (default 1024): ") or 1024)
             port_scan(target_ip, start_port, end_port)
         elif choice == "4":
-            service_name = input("Enter the service name: ").strip()
-            version = input("Enter the service version (leave blank if unknown): ").strip()
-            search_exploitdb(service_name, version if version else None)
+          query = input("Enter your search term for Exploit-DB (e.g., 'Apache', 'OpenSSH'): ").strip()
+          search_exploitdb(query)
         elif choice == "5":
             print("Exiting the tool. Goodbye!")
             break
