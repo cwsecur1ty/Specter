@@ -60,25 +60,18 @@ Enter your choice: 2
 Enter the target IP address: 10.10.10.10
 [+] Detected OS: Linux/Unix (TTL=64)
 
-Port Scan:
-
-Enter your choice: 3
-Enter the target IP address: 10.10.10.10
-Enter the starting port (default 1): 1
-Enter the ending port (default 1024): 100
-[+] Port 22 is open: OpenSSH 7.9
-[+] Port 80 is open: Apache httpd 2.4.29
-
-Search CVEs:
-
-Enter your choice: 4
-Enter the service name: OpenSSH
-Enter the service version: 7.9
-[CVE] CVE-2018-15473: OpenSSH 7.9 - User Enumeration Vulnerability
+# Port Scan:
 
 **For Example**:
 
-![image](https://github.com/user-attachments/assets/fbcbb955-4f8f-430d-9e5d-d0891aeb8ebd)
+![image](https://github.com/user-attachments/assets/a3c40ca7-0e14-4339-bd22-7f81a6c88380)
+
+
+# Search CVEs:
+
+**For Example**:
+
+![image](https://github.com/user-attachments/assets/4e92806f-a3fd-491e-95fa-d39e5f866332)
 
 ---
 
