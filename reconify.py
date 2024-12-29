@@ -103,9 +103,9 @@ import socket
 from concurrent.futures import ThreadPoolExecutor
 from tabulate import tabulate
 
-def port_scan_service_version_enhanced(target_ip, start_port=1, end_port=65535, max_threads=100):
+def enhanced_port_scan(target_ip, start_port=1, end_port=65535, max_threads=100):
     """
-    Perform a multi-threaded port scan with enhanced service version detection.
+    Perform a multi-threaded port scan with enhanced service detection.
     """
     if not is_valid_ip(target_ip):
         print("[-] Invalid IP address. Please try again.")
@@ -114,29 +114,19 @@ def port_scan_service_version_enhanced(target_ip, start_port=1, end_port=65535, 
     print(f"\n[*] Scanning ports {start_port}-{end_port} on {target_ip}...")
     open_ports = []
 
-    # Define known payloads for service detection
-    payloads = {
-        "http": b"HEAD / HTTP/1.1\r\nHost: \r\n\r\n",
-        "amqp": b"AMQP\x00\x01\x00\x00",
-        "stomp": b"CONNECT\n\n",
-    }
-
-    def detect_service(sock, port):
+    def detect_service_version(sock, port):
         """
-        Attempt to detect the service and version running on the open port.
+        Detect service and version by sending generic probes and analyzing responses.
         """
         try:
-            if port in [80, 443]:  # HTTP/HTTPS
-                sock.send(payloads["http"])
-            elif port == 5672:  # AMQP
-                sock.send(payloads["amqp"])
-            elif port in [61613, 61614]:  # STOMP
-                sock.send(payloads["stomp"])
-
+            # Send generic probes
+            sock.sendall(b"\r\n")
             response = sock.recv(1024).decode(errors="ignore").strip()
-            return response if response else "Open (no response)"
+            if response:
+                return response
         except Exception:
-            return "Open (no banner)"
+            pass
+        return "Open (no banner)"
 
     def scan_port(port):
         """
@@ -144,16 +134,10 @@ def port_scan_service_version_enhanced(target_ip, start_port=1, end_port=65535, 
         """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.5)  # Short timeout for faster scans
+                sock.settimeout(1)  # Adjusted timeout for detailed responses
                 if sock.connect_ex((target_ip, port)) == 0:
-                    banner = "Open"
-                    service_details = "Unknown"
-                    try:
-                        service_details = detect_service(sock, port)
-                        banner = service_details
-                    except Exception:
-                        pass
-                    open_ports.append({"Port": port, "Service/Version": banner})
+                    service_info = detect_service_version(sock, port)
+                    open_ports.append({"Port": port, "Service/Version": service_info})
         except Exception:
             pass
 
@@ -163,12 +147,13 @@ def port_scan_service_version_enhanced(target_ip, start_port=1, end_port=65535, 
             executor.submit(scan_port, port)
 
     if open_ports:
-        print("\n[+] Port Scan Results with Enhanced Service/Version Detection:")
+        print("\n[+] Port Scan Results with Enhanced Service Detection:")
         print(tabulate(open_ports, headers="keys", tablefmt="grid"))
     else:
         print("\n[-] No open ports found.")
 
     return open_ports
+
 
 
 import os
@@ -279,7 +264,7 @@ def reconify_shell():
     commands = {
         "ping": ping_sweep,
         "osdetect": os_detection,
-        "portscan": port_scan_service_version_enhanced,
+        "portscan": enhanced_port_scan,
         "cvesearch": search_cve_nist_expanded_minimal,
         "exit": None,
     }
