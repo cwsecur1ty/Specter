@@ -104,7 +104,9 @@ from concurrent.futures import ThreadPoolExecutor
 from tabulate import tabulate
 
 def port_scan_optimized(target_ip, start_port=1, end_port=65535, max_threads=100):
-    """Perform an optimized, multi-threaded port scan."""
+    """
+    Perform an optimized, multi-threaded port scan with improved banner grabbing.
+    """
     if not is_valid_ip(target_ip):
         print("[-] Invalid IP address. Please try again.")
         return []
@@ -115,24 +117,31 @@ def port_scan_optimized(target_ip, start_port=1, end_port=65535, max_threads=100
     def scan_port(port):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.2)
+                sock.settimeout(0.1)  # Short timeout for faster scans
                 if sock.connect_ex((target_ip, port)) == 0:
                     banner = "Open"
                     try:
-                        sock.send(b"HEAD / HTTP/1.1\r\n\r\n")
-                        banner = sock.recv(1024).decode(errors="ignore").strip()
+                        # Try grabbing HTTP or generic banners
+                        sock.send(b"GET / HTTP/1.1\r\nHost: \r\n\r\n")
+                        response = sock.recv(1024).decode(errors="ignore").strip()
+                        banner = response if response else "Open (no banner)"
                     except Exception:
                         pass
                     open_ports.append({"Port": port, "Banner": banner})
         except Exception:
             pass
 
+    # Use ThreadPoolExecutor for concurrent scanning
     with ThreadPoolExecutor(max_threads) as executor:
         for port in range(start_port, end_port + 1):
             executor.submit(scan_port, port)
 
-    print("\n[+] Port Scan Results:")
-    print(tabulate(open_ports, headers="keys", tablefmt="grid"))
+    if open_ports:
+        print("\n[+] Port Scan Results:")
+        print(tabulate(open_ports, headers="keys", tablefmt="grid"))
+    else:
+        print("\n[-] No open ports found.")
+
     return open_ports
 
 import os
