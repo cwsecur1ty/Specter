@@ -267,7 +267,7 @@ def reconify_shell():
     commands = {
         "ping": ping_sweep,
         "osdetect": os_detection,
-        "portscan": port_scan_optimized,
+        "portscan": port_scan_service_version,
         "cvesearch": search_cve_nist_expanded_minimal,
         "exit": None,
     }
