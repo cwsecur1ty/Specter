@@ -106,13 +106,13 @@ from tabulate import tabulate
 
 def nmap_port_scan(target_ip, start_port=1, end_port=65535):
     """
-    Perform a port scan using nmap and output results in a clean, readable format.
+    Perform a port scan using nmap and output results in a clean, indented format.
     """
     if not is_valid_ip(target_ip):
         print("[-] Invalid IP address. Please try again.")
         return
 
-    print(f"\n[*] Running port scan on {target_ip} (ports {start_port}-{end_port})...")
+    print(f"\n[*] Running Nmap scan on {target_ip} (ports {start_port}-{end_port})...")
     nm = nmap.PortScanner()
 
     try:
@@ -120,7 +120,7 @@ def nmap_port_scan(target_ip, start_port=1, end_port=65535):
         nm.scan(
             hosts=target_ip,
             ports=f"{start_port}-{end_port}",
-            arguments='-sV -sC'
+            arguments='-sV -sC --open'
         )
 
         for host in nm.all_hosts():
@@ -130,18 +130,19 @@ def nmap_port_scan(target_ip, start_port=1, end_port=65535):
                     for port in nm[host][protocol]:
                         port_info = nm[host][protocol][port]
                         print(f"Port: {port}")
-                        print(f"State: {port_info.get('state', 'unknown')}")
-                        print(f"Service: {port_info.get('name', 'unknown')}")
-                        print(f"Version: {port_info.get('product', '')} {port_info.get('version', '')}".strip())
+                        print(f"  - State: {port_info.get('state', 'unknown')}")
+                        print(f"  - Service: {port_info.get('name', 'unknown')}")
+                        version = port_info.get('product', '') + " " + port_info.get('version', '')
+                        if version.strip():
+                            print(f"    - Version: {version.strip()}")
                         extra_info = port_info.get('extrainfo', '').strip()
                         if extra_info:
-                            print("Extra Info:")
-                            for line in extra_info.split('\n'):
-                                print(f"  {line}")
-                        script_output = port_info.get('script', '')
+                            print(f"    - Extra Information: {extra_info}")
+                        script_output = port_info.get('script', {})
                         if script_output:
-                            print("Script Output:")
-                            print(f"  {script_output.strip()}")
+                            print("    - Script Output:")
+                            for script_name, script_result in script_output.items():
+                                print(f"      - {script_name}: {script_result}")
                         print("-" * 40)
 
     except nmap.PortScannerError as e:
