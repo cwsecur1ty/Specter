@@ -104,7 +104,7 @@ import socket
 from concurrent.futures import ThreadPoolExecutor
 from tabulate import tabulate
 
-def nmap_port_scan_clean(target_ip, start_port=1, end_port=65535):
+def nmap_port_scan(target_ip, start_port=1, end_port=65535):
     """
     Perform a port scan using nmap and output results in a clean, readable format.
     """
