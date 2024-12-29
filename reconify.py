@@ -14,6 +14,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import nmap
 
 # Get API Key
 def get_api_key(file_path="settings.json"):
@@ -102,6 +103,53 @@ max_threads = multiprocessing.cpu_count() * 2
 import socket
 from concurrent.futures import ThreadPoolExecutor
 from tabulate import tabulate
+
+def nmap_port_scan(target_ip, start_port=1, end_port=65535):
+    """
+    Perform a port scan using nmap and retrieve service and script information.
+    """
+    if not is_valid_ip(target_ip):
+        print("[-] Invalid IP address. Please try again.")
+        return
+
+    print(f"\n[*] Running Nmap scan on {target_ip} (ports {start_port}-{end_port})...")
+    nm = nmap.PortScanner()
+
+    try:
+        # Run the Nmap scan
+        nm.scan(
+            hosts=target_ip,
+            ports=f"{start_port}-{end_port}",
+            arguments='-sV -sC --open'  # Service version detection and default scripts
+        )
+        results = []
+
+        for host in nm.all_hosts():
+            if nm[host].state() == 'up':
+                print(f"[+] Host {host} is up")
+                for protocol in nm[host].all_protocols():
+                    for port in nm[host][protocol]:
+                        port_info = nm[host][protocol][port]
+                        results.append({
+                            "Port": port,
+                            "State": port_info.get("state", "unknown"),
+                            "Service": port_info.get("name", "unknown"),
+                            "Version": port_info.get("product", "") + " " + port_info.get("version", ""),
+                            "Extra Info": port_info.get("extrainfo", ""),
+                            "Script": port_info.get("script", "")
+                        })
+
+        # Print the results in a table
+        if results:
+            print("\n[+] Nmap Scan Results:")
+            print(tabulate(results, headers="keys", tablefmt="fancy_grid"))
+        else:
+            print("[-] No open ports found.")
+
+    except nmap.PortScannerError as e:
+        print(f"[-] Nmap error: {e}")
+    except Exception as e:
+        print(f"[-] An error occurred during the scan: {e}")
 
 def enhanced_port_scan(target_ip, start_port=1, end_port=65535, max_threads=100):
     """
@@ -264,7 +312,7 @@ def reconify_shell():
     commands = {
         "ping": ping_sweep,
         "osdetect": os_detection,
-        "portscan": enhanced_port_scan,
+        "portscan": nmap_port_scan,
         "cvesearch": search_cve_nist_expanded_minimal,
         "exit": None,
     }
