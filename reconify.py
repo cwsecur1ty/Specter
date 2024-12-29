@@ -103,9 +103,9 @@ import socket
 from concurrent.futures import ThreadPoolExecutor
 from tabulate import tabulate
 
-def port_scan_optimized(target_ip, start_port=1, end_port=65535, max_threads=100):
+def port_scan_service_version(target_ip, start_port=1, end_port=65535, max_threads=100):
     """
-    Perform an optimized, multi-threaded port scan with improved banner grabbing.
+    Perform a multi-threaded port scan with service version detection.
     """
     if not is_valid_ip(target_ip):
         print("[-] Invalid IP address. Please try again.")
@@ -114,20 +114,34 @@ def port_scan_optimized(target_ip, start_port=1, end_port=65535, max_threads=100
     print(f"\n[*] Scanning ports {start_port}-{end_port} on {target_ip}...")
     open_ports = []
 
+    def detect_service(sock):
+        """
+        Attempt to detect the service running on the open port.
+        """
+        try:
+            # Send common probing requests
+            sock.send(b"HEAD / HTTP/1.1\r\nHost: \r\n\r\n")
+            response = sock.recv(1024).decode(errors="ignore").strip()
+            return response if response else "Open (no response)"
+        except Exception:
+            return "Open (no banner)"
+
     def scan_port(port):
+        """
+        Scan a single port and attempt to identify the service and version.
+        """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.1)  # Short timeout for faster scans
+                sock.settimeout(0.2)  # Short timeout for faster scans
                 if sock.connect_ex((target_ip, port)) == 0:
                     banner = "Open"
+                    service_details = "Unknown"
                     try:
-                        # Try grabbing HTTP or generic banners
-                        sock.send(b"GET / HTTP/1.1\r\nHost: \r\n\r\n")
-                        response = sock.recv(1024).decode(errors="ignore").strip()
-                        banner = response if response else "Open (no banner)"
+                        service_details = detect_service(sock)
+                        banner = service_details
                     except Exception:
                         pass
-                    open_ports.append({"Port": port, "Banner": banner})
+                    open_ports.append({"Port": port, "Service/Version": banner})
         except Exception:
             pass
 
@@ -137,12 +151,13 @@ def port_scan_optimized(target_ip, start_port=1, end_port=65535, max_threads=100
             executor.submit(scan_port, port)
 
     if open_ports:
-        print("\n[+] Port Scan Results:")
+        print("\n[+] Port Scan Results with Service/Version Detection:")
         print(tabulate(open_ports, headers="keys", tablefmt="grid"))
     else:
         print("\n[-] No open ports found.")
 
     return open_ports
+
 
 import os
 import shutil
