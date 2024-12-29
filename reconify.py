@@ -147,29 +147,32 @@ def search_cve_mitre(query, output_file="mitre_cve_results.txt"):
                 cve_link = f"https://cve.mitre.org{columns[0].find('a')['href']}"
                 description = columns[1].text.strip()
 
-                # Fix long descriptions with wrapping
-                wrapped_description = "\n".join(textwrap.wrap(description, width=80))
+                # Truncate description for console output
+                truncated_description = (description[:80] + "...") if len(description) > 80 else description
 
                 # Fix URLs to avoid duplicates
                 if cve_link.startswith("https://cve.mitre.orghttps://"):
                     cve_link = cve_link.replace("https://cve.mitre.org", "")
 
-                results.append([cve_id, wrapped_description, cve_link])
+                results.append([cve_id, truncated_description, cve_link])
 
-        # Print results in a tabulated format
+        # Display only the first 10 results in the console
         headers = ["CVE ID", "Description", "Link"]
-        print("\n" + tabulate(results, headers=headers, tablefmt="fancy_grid"))
+        print("\n" + tabulate(results[:10], headers=headers, tablefmt="fancy_grid"))
 
         # Save full results to a file
         with open(output_file, "w", encoding="utf-8") as file:
             for row in results:
                 file.write(f"{row[0]}: {row[1]} ({row[2]})\n")
-        print(f"\n[+] Results saved to {output_file}.")
+
+        print(f"\n[+] Found {len(results)} CVEs. Displaying the first 10 above.")
+        print(f"[+] All results have been saved to {output_file}.")
 
     except requests.exceptions.RequestException as e:
         print(f"[-] Error querying MITRE CVE database: {e}")
     except Exception as e:
         print(f"[-] An unexpected error occurred: {e}")
+
 
 
 
