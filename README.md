@@ -85,6 +85,20 @@ Libraries:
 - socket
 - requests
 
+---
+
+## Requesting an NVD API Key (not currently needed)
+
+To use the CVE searching feature, you need an API key for the National Vulnerability Database (NVD). Follow these steps to request your API key:
+
+Visit the NVD API Key Request Page. [CLICK HERE.](https://nvd.nist.gov/developers/request-an-api-key)
+
+1. Fill out the form. I used (Self Employed, My Email, Personal Use / Not listed).
+2. Confirm the request via your email.
+3. Copy and save the API key on the webpage and put this in the settings.json file.
+
+Ensure you keep your API key secure and avoid sharing it publicly. For more details, refer to the NVD API documentation.
+
 ## Contributions
 
 Contributions are welcome! Feel free to open an issue or submit a pull request with improvements, bug fixes, or new features.
