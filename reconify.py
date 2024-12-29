@@ -15,6 +15,102 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import nmap
+import threading
+from datetime import datetime
+from urllib.parse import urlparse
+from queue import Queue
+
+# Global variables for directory scanning
+queue = Queue()
+found_urls = []
+
+# Directory scanning
+def dirscan(base_url, wordlist_path, extensions=None, threads=10):
+    """
+    Perform directory scanning on the target URL.
+    """
+    if not os.path.isfile(wordlist_path):
+        print(f"[-] Wordlist file '{wordlist_path}' does not exist.")
+        return
+
+    # Read the wordlist
+    with open(wordlist_path, 'r') as f:
+        directories = [line.strip() for line in f.readlines()]
+
+    # Add directories to the queue
+    for directory in directories:
+        queue.put(directory)
+
+    def scan_directory(base_url, directory, extensions):
+        """
+        Scans a single directory by making HTTP requests.
+        """
+        urls_to_test = [f"{base_url}/{directory}"]
+        if extensions:
+            urls_to_test += [f"{base_url}/{directory}{ext}" for ext in extensions]
+
+        with requests.Session() as session:
+            session.headers.update({"User-Agent": "DirHunter/1.0"})
+            for url in urls_to_test:
+                try:
+                    response = session.get(url, allow_redirects=False, timeout=5)
+                    if response.status_code in [200, 301, 302, 403]:
+                        found_urls.append((url, response.status_code))
+                        print(f"[+] Found: {url} (Status: {response.status_code})")
+                        if url.endswith('/'):
+                            queue.put(directory + '/')
+                except requests.RequestException as e:
+                    print(f"[-] Error: {e}")
+
+    def worker():
+        """
+        Worker function for threading.
+        """
+        while not queue.empty():
+            directory = queue.get()
+            scan_directory(base_url, directory, extensions)
+            queue.task_done()
+
+    # Start threads
+    thread_list = []
+    for _ in range(threads):
+        thread = threading.Thread(target=worker)
+        thread.start()
+        thread_list.append(thread)
+
+    # Wait for all threads to complete
+    queue.join()
+    for thread in thread_list:
+        thread.join()
+
+    # Print results
+    print("\n[+] Directory Scan Complete. Results:")
+    for url, status in found_urls:
+        print(f"{url} (Status: {status})")
+
+    # Save results
+    save_path = generate_save_path(base_url)
+    save_results(save_path)
+
+def generate_save_path(base_url):
+    """
+    Generate a default save path for results.
+    """
+    if not os.path.exists('results'):
+        os.makedirs('results')
+    parsed_url = urlparse(base_url)
+    hostname = parsed_url.hostname
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    return f"results/{timestamp}-{hostname}-DirScan-report.txt"
+
+def save_results(results_path):
+    """
+    Save scan results to a file.
+    """
+    with open(results_path, 'w') as f:
+        for url, status in found_urls:
+            f.write(f"{url} (Status: {status})\n")
+    print(f"[+] Results saved to {results_path}")
 
 # Get API Key
 def get_api_key(file_path="settings.json"):
@@ -306,13 +402,14 @@ def reconify_shell():
 |__/  |__/ \_______/ \_______/ \______/ |__/  |__/|__/|__/      \____  $$                                                                     
 """
     print(banner)
-    print("Welcome to Reconify CLI. Type 'help' for a list of commands.")
+    print("Welcome to Reconify CLI. Type 'help' for a list of commands.\n")
 
     commands = {
         "ping": ping_sweep,
         "osdetect": os_detection,
         "portscan": nmap_port_scan,
         "cvesearch": search_cve_nist_expanded_minimal,
+        "dirscan": dirscan,
         "exit": None,
     }
 
@@ -322,22 +419,40 @@ def reconify_shell():
             if not user_input:
                 continue
 
-            # Parse the command and its argumentsf
             parts = user_input.split(maxsplit=1)
             command = parts[0].lower()
             args = parts[1:] if len(parts) > 1 else []
 
             if command == "help":
                 print("\nAvailable Commands:")
-                print("  ping <IP>                  - Perform a ping sweep on the specified IP.")
-                print("  osdetect <IP>              - Perform OS detection based on TTL analysis.")
-                print("  portscan <IP> <start> <end> - Scan ports on the specified IP within a range. (default is 1 to 65,535)")
-                print("  cvesearch <query>          - Search the NIST CVE database for a query.")
-                print("  exit                       - Exit the tool.")
+                print("\n INITIAL ENUMERATION")
+                print("  ping <IP>                   Perform a ping sweep on the specified IP.")
+                print("  osdetect <IP>               Perform OS detection based on TTL analysis.")
+                print("  portscan <IP> <start> <end> Scan ports on the specified IP within a range.")
+                print("                              Default is 1 to 65,535.")
+                print("  cvesearch <query>           Search the NIST CVE database for a query.")
+                print("\n WEB RECON")
+                print("  dirscan <URL> <WORDLIST> [EXTENSIONS] Perform directory scanning with optional")
+                print("                                        file extensions.")
+                print("\n OTHER")
+                print("  exit                        Exit the tool.")
+
             elif command in commands:
                 if command == "exit":
                     print("Exiting Reconify. Goodbye!")
                     break
+                elif command == "dirscan":
+                    if args:
+                        parts = args[0].split()
+                        if len(parts) < 2:
+                            print("Usage: dirscan <URL> <WORDLIST> [EXTENSIONS]")
+                        else:
+                            base_url = parts[0]
+                            wordlist_path = parts[1]
+                            extensions = parts[2:] if len(parts) > 2 else None
+                            dirscan(base_url, wordlist_path, extensions)
+                    else:
+                        print("Usage: dirscan <URL> <WORDLIST> [EXTENSIONS]")
                 else:
                     func = commands[command]
                     if len(args) == 1:
@@ -348,6 +463,7 @@ def reconify_shell():
                 print(f"Unknown command: {command}. Type 'help' for a list of commands.")
         except Exception as e:
             print(f"Error: {e}")
+
 
 # Main Function
 def main():
