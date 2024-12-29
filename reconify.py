@@ -103,9 +103,9 @@ import socket
 from concurrent.futures import ThreadPoolExecutor
 from tabulate import tabulate
 
-def port_scan_service_version(target_ip, start_port=1, end_port=65535, max_threads=100):
+def port_scan_service_version_enhanced(target_ip, start_port=1, end_port=65535, max_threads=100):
     """
-    Perform a multi-threaded port scan with service version detection.
+    Perform a multi-threaded port scan with enhanced service version detection.
     """
     if not is_valid_ip(target_ip):
         print("[-] Invalid IP address. Please try again.")
@@ -114,13 +114,25 @@ def port_scan_service_version(target_ip, start_port=1, end_port=65535, max_threa
     print(f"\n[*] Scanning ports {start_port}-{end_port} on {target_ip}...")
     open_ports = []
 
-    def detect_service(sock):
+    # Define known payloads for service detection
+    payloads = {
+        "http": b"HEAD / HTTP/1.1\r\nHost: \r\n\r\n",
+        "amqp": b"AMQP\x00\x01\x00\x00",
+        "stomp": b"CONNECT\n\n",
+    }
+
+    def detect_service(sock, port):
         """
-        Attempt to detect the service running on the open port.
+        Attempt to detect the service and version running on the open port.
         """
         try:
-            # Send common probing requests
-            sock.send(b"HEAD / HTTP/1.1\r\nHost: \r\n\r\n")
+            if port in [80, 443]:  # HTTP/HTTPS
+                sock.send(payloads["http"])
+            elif port == 5672:  # AMQP
+                sock.send(payloads["amqp"])
+            elif port in [61613, 61614]:  # STOMP
+                sock.send(payloads["stomp"])
+
             response = sock.recv(1024).decode(errors="ignore").strip()
             return response if response else "Open (no response)"
         except Exception:
@@ -132,12 +144,12 @@ def port_scan_service_version(target_ip, start_port=1, end_port=65535, max_threa
         """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.2)  # Short timeout for faster scans
+                sock.settimeout(0.5)  # Short timeout for faster scans
                 if sock.connect_ex((target_ip, port)) == 0:
                     banner = "Open"
                     service_details = "Unknown"
                     try:
-                        service_details = detect_service(sock)
+                        service_details = detect_service(sock, port)
                         banner = service_details
                     except Exception:
                         pass
@@ -151,7 +163,7 @@ def port_scan_service_version(target_ip, start_port=1, end_port=65535, max_threa
             executor.submit(scan_port, port)
 
     if open_ports:
-        print("\n[+] Port Scan Results with Service/Version Detection:")
+        print("\n[+] Port Scan Results with Enhanced Service/Version Detection:")
         print(tabulate(open_ports, headers="keys", tablefmt="grid"))
     else:
         print("\n[-] No open ports found.")
@@ -267,7 +279,7 @@ def reconify_shell():
     commands = {
         "ping": ping_sweep,
         "osdetect": os_detection,
-        "portscan": port_scan_service_version,
+        "portscan": port_scan_service_version_enhanced,
         "cvesearch": search_cve_nist_expanded_minimal,
         "exit": None,
     }
