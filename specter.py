@@ -20,6 +20,12 @@ from datetime import datetime
 from urllib.parse import urlparse
 from smb.SMBConnection import SMBConnection # pysmb
 from queue import Queue
+import shutil
+import sys
+from selenium.webdriver.firefox.service import Service
+from selenium.webdriver.firefox.options import Options
+from selenium import webdriver
+import urllib.parse
 
 # Global variables for directory scanning
 queue = Queue()
@@ -95,13 +101,20 @@ def dirscan(base_url, wordlist_path, extensions=None, threads=10):
         base_url = "https://" + base_url  # Default to HTTPS
         print(f"[!] Base URL updated to include scheme: {base_url}")
 
+    # Resolve the wordlist path to ensure it works for both absolute and relative paths
+    wordlist_path = os.path.abspath(wordlist_path)
+
     if not os.path.isfile(wordlist_path):
         print(f"[-] Wordlist file '{wordlist_path}' does not exist.")
         return
 
     # Read the wordlist
-    with open(wordlist_path, 'r') as f:
-        directories = [line.strip() for line in f.readlines()]
+    try:
+        with open(wordlist_path, 'r') as f:
+            directories = [line.strip() for line in f.readlines()]
+    except Exception as e:
+        print(f"[-] Error reading wordlist file: {e}")
+        return
 
     # Queue and results list
     scan_queue = queue.Queue()
@@ -160,7 +173,6 @@ def dirscan(base_url, wordlist_path, extensions=None, threads=10):
     # Save results
     save_path = generate_save_path(base_url)
     save_results(found_urls, save_path)
-
 
 def generate_save_path(base_url):
     """
@@ -369,16 +381,6 @@ def enhanced_port_scan(target_ip, start_port=1, end_port=65535, max_threads=100)
 
     return open_ports
 
-
-
-import os
-import shutil
-import sys
-from selenium.webdriver.firefox.service import Service
-from selenium.webdriver.firefox.options import Options
-from selenium import webdriver
-import urllib.parse
-
 def search_cve_nist_expanded_minimal(query, max_results=100, output_file="nist_cve_results_minimal.txt"):
     """
     Search for CVEs using the NIST RESTful API, display minimal results, and save them to a file.
@@ -427,11 +429,15 @@ def search_cve_nist_expanded_minimal(query, max_results=100, output_file="nist_c
 
                 cve_url = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
 
-                # Append results to the table
-                results.append([
-                    cve_id, severity, exploitability_score, cwe,
-                    truncated_description, cve_id  # Shortened link for display
-                ])
+                # Append results as a dictionary
+                results.append({
+                    "CVE ID": cve_id,
+                    "Severity": severity,
+                    "Exploitability": exploitability_score,
+                    # "CWE": cwe, #CWE Results removed for now for better formatting
+                    "Description": truncated_description,
+                    "Link": cve_url
+                })
 
             start_index += results_per_page
 
@@ -440,13 +446,21 @@ def search_cve_nist_expanded_minimal(query, max_results=100, output_file="nist_c
                 break
 
         if results:
-            headers = ["CVE ID", "Severity", "Exploitability", "CWE", "Description", "Link"]
-            print("\n" + tabulate(results, headers=headers, tablefmt="fancy_grid"))
+            # Display results inline
+            print("\n[+] CVE Results:\n")
+            for idx, result in enumerate(results, 1):
+                print(f"{idx}. CVE ID: {result['CVE ID']} | Severity: {result['Severity']} | "
+                      f"Exploitability: {result['Exploitability']} | " # New
+                      # f"Exploitability: {result['Exploitability']} | CWE: {result['CWE']} | " # Old
+                      f"Description: {result['Description']} | Link: {result['Link']}")
 
             # Save detailed results to a file
             with open(output_file, "w", encoding="utf-8") as file:
-                for row in results:
-                    file.write("\t".join(str(x) for x in row[:-1]) + f" ({cve_url})\n")
+                for result in results:
+                    file.write(f"CVE ID: {result['CVE ID']} | Severity: {result['Severity']} | "
+                               f"Exploitability: {result['Exploitability']} | " # New
+                               # f"Exploitability: {result['Exploitability']} | CWE: {result['CWE']} | " # Old
+                               f"Description: {result['Description']} | Link: {result['Link']}\n")
 
             print(f"\n[+] Found {len(results)} CVEs. Displaying the first {len(results)} above.")
             print(f"[+] All results have been saved to {output_file}.")
@@ -457,6 +471,8 @@ def search_cve_nist_expanded_minimal(query, max_results=100, output_file="nist_c
         print(f"[-] An error occurred while querying the NIST API: {e}")
     except Exception as e:
         print(f"[-] An error occurred: {e}")
+
+
 
 # Reconify Shell
 def reconify_shell():
