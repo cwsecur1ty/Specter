@@ -1,6 +1,6 @@
-# Reconify - Automated Reconnaissance Toolbox
+# Specter - Automated Reconnaissance Toolbox
 
-Reconify is a Python-based reconnaissance tool designed for ethical hacking and penetration testing. It simplifies the initial recon phase by automating tasks like target reachability checks, operating system detection, port scanning, and CVE lookups. Built for Hack The Box (HTB) enthusiasts and security professionals, it features an intuitive menu-based interface and modular functionality.
+Specter is a Python-based reconnaissance tool designed for ethical hacking and penetration testing. It simplifies the initial recon phase by automating tasks like target reachability checks, operating system detection, port scanning, and CVE lookups. Built for Hack The Box (HTB) enthusiasts and security professionals, it features an intuitive menu-based interface and modular functionality.
 
 ---
 
@@ -33,8 +33,8 @@ Reconify is a Python-based reconnaissance tool designed for ethical hacking and 
 
 1. Clone the repository:
 
-git clone https://github.com/<your-username>/reconify.git
-cd reconify
+git clone https://github.com/<your-username>/Specter.git
+cd Specter
 
 2. Install the required dependencies:
 
@@ -42,7 +42,7 @@ pip install -r requirements.txt
 
 3. Run the tool:
 
-python reconify.py
+python Specter.py
 
 ---
 
