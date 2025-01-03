@@ -6,7 +6,6 @@ import ipaddress
 import requests
 from scapy.all import sr1, IP, ICMP
 from bs4 import BeautifulSoup
-from tabulate import tabulate
 from concurrent.futures import ThreadPoolExecutor
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -24,14 +23,113 @@ import shutil
 import sys
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
-from selenium import webdriver
 import urllib.parse
+import dns.resolver
+import dns.exception
+import dns.reversename
+import multiprocessing
+from tabulate import tabulate
 
 # Global variables for directory scanning
+max_threads = multiprocessing.cpu_count() * 2
 queue = Queue()
 found_urls = []
 
-# SMB Recon
+# Avoiding false positives *.example.com
+def is_wildcard(domain):
+    """
+    Detect if a domain has wildcard DNS enabled.
+    """
+    print(f"[!] Checking for wildcard DNS on {domain}...")
+    random_test_subdomain = f"random-nonexistent-{os.urandom(4).hex()}.{domain}"
+
+    try:
+        answers = dns.resolver.resolve(random_test_subdomain)
+        if answers:
+            print(f"[!] Wildcard DNS detected on {domain}.")
+            return True
+    except dns.resolver.NXDOMAIN:
+        return False  # No wildcard
+    except dns.exception.DNSException as e:
+        print(f"[-] Error checking wildcard DNS: {e}")
+    return False
+
+# Subdomain Enumeration Techniques
+def subdomain_enum(domain, wordlist_path, threads=10, output_file="subdomains_found.txt"):
+    """
+    Perform subdomain enumeration by brute-forcing subdomains with a wordlist.
+    
+    Parameters:
+        domain (str): The target domain to enumerate.
+        wordlist_path (str): Path to the wordlist for subdomains.
+        threads (int): Number of threads to use for parallel enumeration.
+        output_file (str): File to save the discovered subdomains.
+    """
+    if not os.path.isfile(wordlist_path):
+        print(f"[-] Wordlist file '{wordlist_path}' does not exist.")
+        return
+
+    print(f"\n[+] Starting Subdomain Enumeration for: {domain}")
+    print(f"[+] Using wordlist: {wordlist_path}")
+    
+    # Read subdomain wordlist
+    with open(wordlist_path, "r") as file:
+        subdomains = [line.strip() for line in file.readlines()]
+    
+    found_subdomains = []
+
+    def resolve_subdomain(subdomain):
+        """
+        Resolve a subdomain using the dnspython library.
+        """
+        try:
+            target = f"{subdomain}.{domain}"
+            answers = dns.resolver.resolve(target)
+            ips = [answer.address for answer in answers]
+            print(f"[+] Found: {target} -> {', '.join(ips)}")
+            found_subdomains.append((target, ips))
+        except dns.resolver.NXDOMAIN:
+            pass  # Subdomain does not exist
+        except dns.resolver.NoAnswer:
+            pass  # No DNS records for this subdomain
+        except dns.exception.DNSException as e:
+            print(f"[-] Error resolving {subdomain}.{domain}: {e}")
+
+    # Check for wildcard DNS
+    wildcard_detected = is_wildcard(domain)
+
+    def worker(subdomains):
+        """
+        Worker function for subdomain resolution.
+        """
+        for subdomain in subdomains:
+            resolve_subdomain(subdomain)
+
+    # Divide wordlist for threading
+    chunk_size = max(1, len(subdomains) // threads)
+    chunks = [subdomains[i:i + chunk_size] for i in range(0, len(subdomains), chunk_size)]
+
+    # Use ThreadPoolExecutor for parallel processing
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        executor.map(worker, chunks)
+    
+    # Filter out wildcard entries if necessary
+    if wildcard_detected:
+        print("[!] Filtering potential wildcard entries...")
+        non_wildcard_subdomains = [
+            entry for entry in found_subdomains if not is_wildcard(entry[0])
+        ]
+        found_subdomains = non_wildcard_subdomains
+
+    # Save results to a file
+    if found_subdomains:
+        with open(output_file, "w") as file:
+            for subdomain, ips in found_subdomains:
+                file.write(f"{subdomain} -> {', '.join(ips)}\n")
+        print(f"\n[+] Subdomain Enumeration Complete. Results saved to {output_file}.")
+    else:
+        print("\n[-] No subdomains found.")
+
 # SMB Recon Module
 def smb_recon(target_ip):
     """
@@ -275,15 +373,6 @@ def os_detection(target_ip):
         print(f"[-] OS detection error: {e}")
 
 # Port Scan
-import multiprocessing
-
-max_threads = multiprocessing.cpu_count() * 2
-
-
-import socket
-from concurrent.futures import ThreadPoolExecutor
-from tabulate import tabulate
-
 def nmap_port_scan(target_ip, start_port=1, end_port=65535):
     """
     Perform a port scan using nmap and output results in a clean, indented format.
@@ -500,6 +589,7 @@ S P E C T E R
         "cvesearch": search_cve_nist_expanded_minimal,
         "dirscan": dirscan,
         "smbrecon": smb_recon,
+        "subenum": subdomain_enum,
         "exit": None,
     }
 
@@ -516,16 +606,17 @@ S P E C T E R
             if command == "help":
                 print("\nAvailable Commands:")
                 print("\n INITIAL ENUMERATION")
-                print("  ping <IP>                   Perform a ping sweep on the specified IP.")
-                print("  osdetect <IP>               Perform OS detection based on TTL analysis.")
-                print("  portscan <IP> <start> <end> Scan ports on the specified IP within a range.")
-                print("  cvesearch <query>           Search the NIST CVE database for a query.")
+                print("  ping       <IP>                    Perform a ping sweep on the specified IP.")
+                print("  osdetect   <IP>                    Perform OS detection based on TTL analysis.")
+                print("  portscan   <IP> <start> <end>      Scan ports on the specified IP within a range. (default 1-65535)")
+                print("  cvesearch  <query>                 Search the NIST CVE database for a query.")
                 print("\n WEB RECON")
-                print("  dirscan <URL> <WORDLIST>    Perform website directory scanning.")
+                print("  dirscan    <URL> <WORDLIST>        Perform website directory scanning.")
+                print("  subenum    <domain> <wordlist>     Enumerate subdomains using a wordlist.")
                 print("\n SMB RECON")
-                print("  smbrecon <IP>               Enumerate SMB shares and gather metadata.")
+                print("  smbrecon   <IP>                    Enumerate SMB shares and gather metadata.")
                 print("\n OTHER")
-                print("  exit                        Exit the tool.")
+                print("  exit                               Exit the tool.")
 
             elif command in commands:
                 if command == "exit":
@@ -543,6 +634,15 @@ S P E C T E R
                             dirscan(base_url, wordlist_path, extensions)
                     else:
                         print("Usage: dirscan <URL> <WORDLIST> [EXTENSIONS]")
+                elif command == "subenum":
+                    if len(args) == 1:
+                        parts = args[0].split()
+                        if len(parts) < 2:
+                            print("Usage: subenum <domain> <wordlist>")
+                        else:
+                            domain = parts[0]
+                            wordlist_path = parts[1]
+                            subdomain_enum(domain, wordlist_path)
                 elif command == "smbrecon":
                     if args:
                         smb_recon(args[0])
