@@ -1,0 +1,8 @@
+requests
+scapy
+beautifulsoup4
+selenium
+python-nmap
+pysmb
+dnspython
+tabulate
