@@ -1,13 +1,7 @@
+![Linux_optimized](https://github.com/user-attachments/assets/b04cb3e9-b27f-496f-bb2a-f53805a8f1a6)
 # Specter - Reconnaissance and Enumeration Tool
 
 **Specter**, is an open-source project developed and maintained by me to simplify reconnaissance and enumeration for penetration testers, red teamers, and network administrators.
-
----
-
-## About Specter
-Specter was created as a lightweight reconnaissance tool and has developed into a versatile framework. My goal with this project is to provide a comprehensive solution for recon and enumeration tasks, all while keeping the tool updated with new features and improvements. I view it as a reconnaissance framework? For me it was about bringing tools together so I didn't have to tool hop and I could easily collect my information in one place.
-
----
 
 ## Key Features
 - **Subdomain Enumeration:** Identify subdomains with optional wildcard DNS detection.
@@ -17,8 +11,6 @@ Specter was created as a lightweight reconnaissance tool and has developed into 
 - **Port Scanning:** Conduct fast and comprehensive port scans with enhanced service detection.
 - **OS Detection:** Identify operating systems based on TTL analysis.
 - **Ping Sweep:** Quickly discover live hosts on a network.
-
----
 
 ## Getting Started
 
