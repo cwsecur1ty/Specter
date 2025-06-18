@@ -3,14 +3,16 @@
 
 **Specter**, is an open-source project developed and maintained by me to simplify reconnaissance and enumeration for penetration testers, red teamers, and network administrators.
 
-## Key Features
+## Reconnaissance Features
 - **Subdomain Enumeration:** Identify subdomains with optional wildcard DNS detection.
 - **Directory Scanning:** Perform thorough website directory scans using custom wordlists.
 - **CVE Search:** Query the NIST CVE database to find vulnerabilities quickly.
 - **SMB Reconnaissance:** Enumerate SMB shares and gather detailed service metadata.
 - **Port Scanning:** Conduct fast and comprehensive port scans with enhanced service detection.
 - **OS Detection:** Identify operating systems based on TTL analysis.
-- **Ping Sweep:** Quickly discover live hosts on a network.
+
+## Penetration Testing Features
+- FTP, SMB Brute forcing using default credentials or provided list
 
 ## Getting Started
 
